@@ -17,13 +17,35 @@ class MinioObjectResponse(Protocol):
     def close(self):
         """Closes this response object"""
 
-notification = {'QueueConfigurations': [
+#notification only for ETL TOML config file, as well as for everything
+#Note ideally we would have liked to be able to filter non TOML config file via a syntax such as
+# Filter exclude suffix .toml.   But this is not supported by S3 https://github.com/minio/minio/issues/8217
+#hence the notification with etl_file_upload_notification is going to get everything, and we have to rely on
+#application level filtering
+notification_configs = {'QueueConfigurations': [
     {
-        'Id': 'id',
-        'Arn': settings.minio_notification_arn,
+        'Id': 'etl_file_upload_notification',
+        'Arn': settings.minio_notification_arn_etl_source_file,
         'Events': ['s3:ObjectCreated:*', 's3:ObjectRemoved:*']
+    },
+    {
+        'Id': 'etl_config_upload_notification',
+        'Arn': settings.minio_notification_arn_etl_config,
+        'Events': ['s3:ObjectCreated:*', 's3:ObjectRemoved:*'],
+        'Filter': {
+            'Key': {
+                'FilterRules': [
+                    {
+                        'Name': 'suffix',
+                        'Value': '.toml'
+                    }
+                ]
+            }
+        }
     }
 ]}
+
+
 
 class MinioObjectStore(ObjectStore):
     """Implements the ObjectStore interface using Minio as the backend service"""
@@ -38,7 +60,9 @@ class MinioObjectStore(ObjectStore):
         # Create bucket notification
         if not self._minio_client.bucket_exists(settings.minio_etl_bucket):
             self._minio_client.make_bucket(settings.minio_etl_bucket)
-        self._minio_client.set_bucket_notification(settings.minio_etl_bucket, notification)
+
+        self._minio_client.set_bucket_notification(settings.minio_etl_bucket, notification_configs)
+        self._minio_client.get_bucket_notification(settings.minio_etl_bucket)
 
     def download_object(self, src: ObjectId, dest_file: str) -> None:
         self._minio_client.fget_object(src.namespace, src.path, dest_file)
