@@ -6,7 +6,9 @@ from pathlib import PurePosixPath
 from etl.file_processor_config import FileProcessorConfig
 from etl.object_store.object_id import ObjectId
 
+
 logger = logging.getLogger(__name__)
+
 
 def _compute_config_path(config_object_id: ObjectId, *args) -> ObjectId:
     """Computes a bucket directory relative to a processor config path.
@@ -86,13 +88,13 @@ def glob_matches(object_id: ObjectId, config_object_id: ObjectId, cfg: FileProce
         globs = cfg.handled_file_glob.replace(" ", "")
         regex = re.compile(f".*({globs})$")
         result = bool(regex.match(file_path))
-        logger.info("File {%s} regex match result: %s", file_path, result)
+        LOGGER.info("File {%s} regex match result: %s", file_path, result)
         return result
     except re.error as regex_error:
-        logger.error("Regex compilation error: %s", regex_error)
+        LOGGER.error("Regex compilation error: %s", regex_error)
         return False
     except ValueError as value_error:
-        logger.error("Value error during glob matching: %s", value_error)
+        LOGGER.error("Value error during glob matching: %s", value_error)
         return False
 
 
