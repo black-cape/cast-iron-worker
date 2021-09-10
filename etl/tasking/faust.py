@@ -1,31 +1,53 @@
 """Contains the Faust implementation of the TaskSink backend interface"""
-from typing import AsyncIterable, Callable, Dict, Optional
+import logging
+from dataclasses import dataclass
+from typing import Callable
+from typing import Dict, Optional, List
 
 import faust
 
 from etl.config import settings
 from etl.tasking.interfaces import TaskSink
 
+LOGGER = logging.getLogger(__name__)
+
+
+@dataclass
+class FaustAppConfig:
+    # minimal config needed for a simplistic Faust App that has a single call back function for all messages
+    kafka_consumer_grp: str
+    kafka_topic: str
+    app_agent_func: Callable
+
 
 class FaustTaskSink(TaskSink):
     """Implementation of TaskSink using Faust"""
-    def __init__(self):
+
+    def __init__(self, faust_app_configs: List[FaustAppConfig]):
+        """
+            :param kafka_consumer_grp: Kafka Consumer Group ID to be used as App ID of Faust, see
+            https://faust.readthedocs.io/en/latest/userguide/settings.html#std:setting-id
+            :param kafka_topic: the kafka topic from which to consumer
+        """
         self._event_callback: Callable[[Dict], None] = None
 
-        self._app = faust.App(
-            settings.worker_name,
-            broker=f'kafka://{settings.kafka_broker}',
-            value_serializer='raw'
-        )
-        self._minio_topic: faust.TopicT = self._app.topic(settings.kafka_minio_topic, value_serializer='json')
-        self._app.agent(self._minio_topic)(self._file_evt)
+        self._apps: List[faust.App] = []
+        for app_config in faust_app_configs:
+            app = faust.App(
+                app_config.kafka_consumer_grp,
+                broker=f'kafka://{settings.kafka_broker}',
+                value_serializer='raw'
+            )
+
+            # otherwise each app needs own port, we also don't need it to start a web server
+            app.conf.web_enabled = False
+            faust_topic: faust.TopicT = app.topic(app_config.kafka_topic, value_serializer='json')
+            app.agent(faust_topic)(app_config.app_agent_func)
+
+            self._apps.append(app)
+
         self._worker: Optional[faust.Worker] = None
 
-    async def _file_evt(self, evts: AsyncIterable[Dict]) -> None:
-        async for evt in evts:
-            self._event_callback(evt)
-
-    def start(self, event_callback: Callable[[Dict], None]) -> None:
-        self._event_callback = event_callback
-        self._worker = faust.Worker(self._app, loglevel='info')
+    def start(self) -> None:
+        self._worker = faust.Worker(*self._apps, loglevel='info')
         self._worker.execute_from_commandline()
