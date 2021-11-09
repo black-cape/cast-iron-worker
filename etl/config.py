@@ -23,7 +23,6 @@ class Settings(BaseSettings):
     kafka_topic_castiron_etl_config = 'castiron_etl_config'
     kafka_topic_castiron_etl_source_file = 'castiron_etl_source_file'
 
-    kafka_store_topic: str = 'postgres'
     kafka_pizza_tracker_topic: str = 'pizza-tracker'
 
     minio_etl_bucket: str = 'etl'
@@ -34,6 +33,8 @@ class Settings(BaseSettings):
 
     minio_notification_arn_etl_config: str = 'arn:minio:sqs::config:kafka'
     minio_notification_arn_etl_source_file: str = 'arn:minio:sqs::source:kafka'
+
+    log_level: str = 'debug'
 
 
 settings = Settings()

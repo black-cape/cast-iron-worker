@@ -1,9 +1,9 @@
 """Contains the implementation of the EventProcessor class"""
 import json
-import logging
 import os
 import subprocess
 import tempfile
+from multiprocessing import Process
 from typing import Dict
 
 from etl.config import settings
@@ -16,9 +16,9 @@ from etl.path_helpers import (filename, get_archive_path, get_error_path,
                               get_inbox_path, get_processing_path,
                               glob_matches, parent, rename)
 from etl.pizza_tracker import PizzaTracker
-from etl.util import short_uuid
+from etl.util import get_logger, short_uuid
 
-LOGGER = logging.getLogger(__name__)
+LOGGER = get_logger(__name__)
 ERROR_LOG_SUFFIX = '_error_log_.txt'
 file_suffix_to_ignore = ['.toml', '.keep', ERROR_LOG_SUFFIX]
 
@@ -174,12 +174,19 @@ class GeneralEventProcessor:
                         try:
                             run_method = load_python_processor(processor.python)
                             method_kwargs = {}
+                            pizza_process = None
                             if processor.python.supports_pizza_tracker:
+                                LOGGER.debug('processor supports pizza tracker, starting tracker process now')
                                 method_kwargs['pizza_tracker'] = pizza_tracker.pipe_file_name
+                                pizza_process = Process(target=pizza_tracker.process)
+                                pizza_process.start()
                             if processor.python.supports_metadata:
                                 method_kwargs['file_metadata'] = metadata
 
                             run_method(local_data_file, **method_kwargs)
+                            if pizza_process:
+                                LOGGER.debug('joining pizza tracker process for shutdown')
+                                pizza_process.join()
                             success = True
                         except Exception as exc:  # pylint: disable=broad-except
                             LOGGER.error(f'Failed to process file due to, error will also be dumped to location specified'
