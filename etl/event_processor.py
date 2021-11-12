@@ -66,8 +66,8 @@ class EtlConfigEventProcessor:
 
                 self._object_store.ensure_directory_exists(get_inbox_path(toml_object_id, cfg))
                 self._object_store.ensure_directory_exists(get_processing_path(toml_object_id, cfg))
-                archive_objectId: Optional[ObjectId] = get_archive_path(toml_object_id, cfg)
-                if archive_objectId:
+                archive_object_id: Optional[ObjectId] = get_archive_path(toml_object_id, cfg)
+                if archive_object_id:
                     self._object_store.ensure_directory_exists(get_archive_path(toml_object_id, cfg))
             return True
         except ValueError as exc:
@@ -121,7 +121,7 @@ class GeneralEventProcessor:
 
             # Hypothetical file paths for each directory
             processing_file = get_processing_path(config_object_id, processor, object_id)
-            archive_file:Optional[ObjectId] = get_archive_path(config_object_id, processor, object_id)
+            archive_file: Optional[ObjectId] = get_archive_path(config_object_id, processor, object_id)
             error_file = get_error_path(config_object_id, processor, object_id)
             error_log_file_name = f'{filename(object_id).replace(".", "_")}{ERROR_LOG_SUFFIX}'
             error_log_file = get_error_path(config_object_id, processor, rename(object_id, error_log_file_name))
@@ -186,7 +186,7 @@ class GeneralEventProcessor:
                             success = True
                         except Exception as exc:  # pylint: disable=broad-except
                             LOGGER.error(
-                                f'Failed to process file due to, error will also be dumped to location specified'
+                                f'Failed to process file due to, error will also be dumped to location specified '
                                 f'in ETL processing config if specified{exc}')
                             out.write(
                                 'Failed to proceess due to '
