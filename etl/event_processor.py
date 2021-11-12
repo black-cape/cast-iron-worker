@@ -10,6 +10,7 @@ from etl.config import settings
 from etl.file_processor_config import (FileProcessorConfig,
                                        load_python_processor, try_loads)
 from etl.messaging.interfaces import MessageProducer
+from etl.messaging.kafka_producer import KafkaMessageProducer
 from etl.object_store.interfaces import EventType, ObjectStore
 from etl.object_store.object_id import ObjectId
 from etl.path_helpers import (filename, get_archive_path, get_error_path,
@@ -174,19 +175,19 @@ class GeneralEventProcessor:
                         try:
                             run_method = load_python_processor(processor.python)
                             method_kwargs = {}
-                            pizza_process = None
                             if processor.python.supports_pizza_tracker:
-                                LOGGER.debug('processor supports pizza tracker, starting tracker process now')
                                 method_kwargs['pizza_tracker'] = pizza_tracker.pipe_file_name
-                                pizza_process = Process(target=pizza_tracker.process)
-                                pizza_process.start()
                             if processor.python.supports_metadata:
                                 method_kwargs['file_metadata'] = metadata
 
-                            run_method(local_data_file, **method_kwargs)
-                            if pizza_process:
-                                LOGGER.debug('joining pizza tracker process for shutdown')
-                                pizza_process.join()
+                            run_process = Process(target=run_method, args=(local_data_file,), kwargs=method_kwargs)
+                            run_process.start()
+
+                            if processor.python.supports_pizza_tracker:
+                                LOGGER.debug('processor supports pizza tracker, starting tracker process now')
+                                pizza_tracker.process()
+
+                            run_process.join()
                             success = True
                         except Exception as exc:  # pylint: disable=broad-except
                             LOGGER.error(f'Failed to process file due to, error will also be dumped to location specified'
