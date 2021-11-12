@@ -74,7 +74,7 @@ class FileProcessorConfig(BaseModel):
     handled_file_glob: str
     inbox_dir: str
     processing_dir: str
-    archive_dir: str
+    archive_dir: Optional[str]
     error_dir: str
     save_error_log: bool
     # One of the following must be set in order to process incoming files

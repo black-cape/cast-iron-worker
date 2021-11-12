@@ -5,6 +5,7 @@ from pathlib import PurePosixPath
 
 from etl.file_processor_config import FileProcessorConfig
 from etl.object_store.object_id import ObjectId
+from typing import Optional
 
 LOGGER = logging.getLogger(__name__)
 
@@ -40,15 +41,18 @@ def get_processing_path(config_object_id: ObjectId, cfg: FileProcessorConfig, fi
             else _compute_config_path(config_object_id, cfg.processing_dir))
 
 
-def get_archive_path(config_object_id: ObjectId, cfg: FileProcessorConfig, file_object_id: ObjectId = None) -> ObjectId:
+def get_archive_path(config_object_id: ObjectId, cfg: FileProcessorConfig, file_object_id: ObjectId = None) -> Optional[ObjectId]:
     """Gets an ObjectId of the archive directory for a given config or an object below it
     :param config_object_id: The ObjectId of the processor config file
     :param cfg: The deserialized processor config
     :param file_object_id: An optional object to locate in the directory
+    if archive_dir is not specified, return none
     """
-    return (_compute_config_path(config_object_id, cfg.archive_dir, filename(file_object_id))
-            if file_object_id is not None
-            else _compute_config_path(config_object_id, cfg.archive_dir))
+    if cfg.archive_dir:
+        return (_compute_config_path(config_object_id, cfg.archive_dir, filename(file_object_id))
+                if file_object_id is not None
+                else _compute_config_path(config_object_id, cfg.archive_dir))
+    return None
 
 
 def get_error_path(config_object_id: ObjectId, cfg: FileProcessorConfig, file_object_id: ObjectId = None) -> ObjectId:
