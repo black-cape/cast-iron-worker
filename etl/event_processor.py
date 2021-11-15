@@ -4,13 +4,12 @@ import os
 import subprocess
 import tempfile
 from multiprocessing import Process
-from typing import Dict
+from typing import Dict, Optional
 
 from etl.config import settings
 from etl.file_processor_config import (FileProcessorConfig,
                                        load_python_processor, try_loads)
 from etl.messaging.interfaces import MessageProducer
-from etl.messaging.kafka_producer import KafkaMessageProducer
 from etl.object_store.interfaces import EventType, ObjectStore
 from etl.object_store.object_id import ObjectId
 from etl.path_helpers import (filename, get_archive_path, get_error_path,
@@ -67,9 +66,12 @@ class EtlConfigEventProcessor:
 
                 self._object_store.ensure_directory_exists(get_inbox_path(toml_object_id, cfg))
                 self._object_store.ensure_directory_exists(get_processing_path(toml_object_id, cfg))
-                self._object_store.ensure_directory_exists(get_archive_path(toml_object_id, cfg))
+                archive_object_id: Optional[ObjectId] = get_archive_path(toml_object_id, cfg)
+                if archive_object_id:
+                    self._object_store.ensure_directory_exists(get_archive_path(toml_object_id, cfg))
             return True
-        except ValueError:
+        except ValueError as exc:
+            LOGGER.error(f'Failed to process toml {exc}')
             # Raised if we fail to parse and validate config
             return False
 
@@ -119,7 +121,7 @@ class GeneralEventProcessor:
 
             # Hypothetical file paths for each directory
             processing_file = get_processing_path(config_object_id, processor, object_id)
-            archive_file = get_archive_path(config_object_id, processor, object_id)
+            archive_file: Optional[ObjectId] = get_archive_path(config_object_id, processor, object_id)
             error_file = get_error_path(config_object_id, processor, object_id)
             error_log_file_name = f'{filename(object_id).replace(".", "_")}{ERROR_LOG_SUFFIX}'
             error_log_file = get_error_path(config_object_id, processor, rename(object_id, error_log_file_name))
@@ -190,8 +192,9 @@ class GeneralEventProcessor:
                             run_process.join()
                             success = True
                         except Exception as exc:  # pylint: disable=broad-except
-                            LOGGER.error(f'Failed to process file due to, error will also be dumped to location specified'
-                                         f'in ETL processing config if specified{exc}')
+                            LOGGER.error(
+                                f'Failed to process file due to, error will also be dumped to location specified '
+                                f'in ETL processing config if specified{exc}')
                             out.write(
                                 'Failed to proceess due to '
                                 f'{processor.python.dict()} due to {exc}'
@@ -205,7 +208,8 @@ class GeneralEventProcessor:
 
                     if success:
                         # Success. mv to archive
-                        self._object_store.move_object(processing_file, archive_file)
+                        if archive_file:
+                            self._object_store.move_object(processing_file, archive_file)
                         self._message_producer.job_evt_status(job_id, 'success')
                     else:
                         # Failure. mv to failed
