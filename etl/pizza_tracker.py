@@ -2,9 +2,13 @@
 Provides handling of pipe-based ETL shell status notification
 """
 import os
-from io import FileIO, TextIOWrapper
+from io import BufferedReader, FileIO, TextIOWrapper
+from time import sleep
 
 from etl.messaging.interfaces import MessageProducer
+from etl.util import get_logger
+
+logger = get_logger(__name__)
 
 
 class PizzaTracker:
@@ -25,8 +29,12 @@ class PizzaTracker:
         while True:
             try:
                 line = self.f_pipe.readline()
+                logger.debug(f'pizza tracker read line: {line}')
                 if not line:
                     # If there is no data, line is empty string
+                    sleep(1.0)
+                    continue
+                if line.strip() == 'END':
                     break
                 cmd, args = line.strip().split(' ', 1)
                 handler = self.__getattribute__(f'_handle_{cmd.lower()}')
@@ -65,12 +73,14 @@ class PizzaTracker:
                     pass
 
         if progress is not None and 0.0 <= progress <= 1.0:
+            logger.debug(f'pizza tracker is logging progress to kafka. job_id: {self.job_id}, progress: {progress}')
             self.message_producer.job_evt_progress(self.job_id, progress)
-
 
     def __enter__(self):
         os.mkfifo(self.pipe_file_name)
-        self.f_pipe = TextIOWrapper(FileIO(os.open(self.pipe_file_name, os.O_RDONLY | os.O_NONBLOCK)))
+        self.f_pipe = TextIOWrapper(
+            BufferedReader(FileIO(os.open(self.pipe_file_name, os.O_RDONLY | os.O_NONBLOCK), mode='r'))
+        )
         return self
 
     def __exit__(self, type_, value, error):

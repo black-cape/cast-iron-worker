@@ -1,8 +1,8 @@
-# Faust Worker Example
+# Cast-Iron Worker Example
 
 ## Getting Started
 
-The Faust Worker example leverages several Python libraries to accomplish the ETL process.
+The Cast-Iron Worker example leverages several Python libraries to accomplish the ETL process.
 * [Faust](https://faust.readthedocs.io/en/latest/index.html)
 * [Kafka](https://github.com/dpkp/kafka-python)
 * [Minio](https://docs.min.io/docs/python-client-api-reference.html)
@@ -28,7 +28,7 @@ $ poetry install
 ## Start the Worker
 
 1. Add `127.0.0.1 kafka` entry to your /etc/hosts file
-1. Start the Faust ETL worker
+1. Start the Cast-Iron ETL worker
     * Locally
     ```
     $ poetry shell
@@ -50,7 +50,6 @@ With the docker containers running and the worker running in either a container 
 1. Add `data/data_test.tsv`
 1. TSV should be ETL-ed
 1. TSV moves to the `archive_dir` bucket
-1. Data inserted into Postgres
 
 ### File glob pattern matching
 For `handled_file_glob` pattern matching, the matchers should be provided as `_test.tsv|_updated.csv|.mp3` (no spaces).

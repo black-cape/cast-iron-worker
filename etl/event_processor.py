@@ -1,9 +1,9 @@
 """Contains the implementation of the EventProcessor class"""
 import json
-import logging
 import os
 import subprocess
 import tempfile
+from multiprocessing import Process
 from typing import Dict, Optional
 
 from etl.config import settings
@@ -16,9 +16,9 @@ from etl.path_helpers import (filename, get_archive_path, get_error_path,
                               get_inbox_path, get_processing_path,
                               glob_matches, parent, rename)
 from etl.pizza_tracker import PizzaTracker
-from etl.util import short_uuid
+from etl.util import get_logger, short_uuid
 
-LOGGER = logging.getLogger(__name__)
+LOGGER = get_logger(__name__)
 ERROR_LOG_SUFFIX = '_error_log_.txt'
 file_suffix_to_ignore = ['.toml', '.keep', ERROR_LOG_SUFFIX]
 
@@ -182,7 +182,16 @@ class GeneralEventProcessor:
                             if processor.python.supports_metadata:
                                 method_kwargs['file_metadata'] = metadata
 
-                            run_method(local_data_file, **method_kwargs)
+                            run_process = Process(target=run_method, args=(local_data_file,), kwargs=method_kwargs)
+                            run_process.start()
+
+                            if processor.python.supports_pizza_tracker:
+                                LOGGER.debug('processor supports pizza tracker, starting tracker process now')
+                                pizza_tracker.process()
+                            else:
+                                LOGGER.warning(f'processor {config_object_id} does not support pizza tracker')
+
+                            run_process.join()
                             success = True
                         except Exception as exc:  # pylint: disable=broad-except
                             LOGGER.error(
