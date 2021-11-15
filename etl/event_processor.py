@@ -188,6 +188,8 @@ class GeneralEventProcessor:
                             if processor.python.supports_pizza_tracker:
                                 LOGGER.debug('processor supports pizza tracker, starting tracker process now')
                                 pizza_tracker.process()
+                            else:
+                                LOGGER.warning(f'processor {config_object_id} does not support pizza tracker')
 
                             run_process.join()
                             success = True
