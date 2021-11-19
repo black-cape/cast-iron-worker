@@ -1,8 +1,10 @@
 """Contains the implementation of the EventProcessor class"""
 import json
+import multiprocessing as mp
 import os
 import subprocess
 import tempfile
+import traceback
 from multiprocessing import Process
 from typing import Dict, Optional
 
@@ -22,6 +24,28 @@ LOGGER = get_logger(__name__)
 ERROR_LOG_SUFFIX = '_error_log_.txt'
 file_suffix_to_ignore = ['.toml', '.keep', ERROR_LOG_SUFFIX]
 
+# As per https://stackoverflow.com/questions/19924104/python-multiprocessing-handling-child-errors-in-parent/33599967#33599967
+# needs to bubble exeception up to parent
+class ProcessWithExceptionBubbling(mp.Process):
+    def __init__(self, *args, **kwargs):
+        mp.Process.__init__(self, *args, **kwargs)
+        self._pconn, self._cconn = mp.Pipe()
+        self._exception = None
+
+    def run(self):
+        try:
+            mp.Process.run(self)
+            self._cconn.send(None)
+        except Exception as e:
+            tb = traceback.format_exc()
+            self._cconn.send((e, tb))
+            # raise e  # You can still rise this exception if you need to
+
+    @property
+    def exception(self):
+        if self._pconn.poll():
+            self._exception = self._pconn.recv()
+        return self._exception
 
 class EtlConfigEventProcessor:
     """A service that processes individual object events"""
@@ -66,6 +90,7 @@ class EtlConfigEventProcessor:
 
                 self._object_store.ensure_directory_exists(get_inbox_path(toml_object_id, cfg))
                 self._object_store.ensure_directory_exists(get_processing_path(toml_object_id, cfg))
+                self._object_store.ensure_directory_exists(get_error_path(toml_object_id, cfg))
                 archive_object_id: Optional[ObjectId] = get_archive_path(toml_object_id, cfg)
                 if archive_object_id:
                     self._object_store.ensure_directory_exists(get_archive_path(toml_object_id, cfg))
@@ -182,7 +207,7 @@ class GeneralEventProcessor:
                             if processor.python.supports_metadata:
                                 method_kwargs['file_metadata'] = metadata
 
-                            run_process = Process(target=run_method, args=(local_data_file,), kwargs=method_kwargs)
+                            run_process = ProcessWithExceptionBubbling(target=run_method, args=(local_data_file,), kwargs=method_kwargs)
                             run_process.start()
 
                             if processor.python.supports_pizza_tracker:
@@ -192,6 +217,9 @@ class GeneralEventProcessor:
                                 LOGGER.warning(f'processor {config_object_id} does not support pizza tracker')
 
                             run_process.join()
+                            if run_process.exception:
+                                raise run_process.exception
+
                             success = True
                         except Exception as exc:  # pylint: disable=broad-except
                             LOGGER.error(
