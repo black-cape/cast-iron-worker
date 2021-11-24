@@ -204,6 +204,7 @@ class GeneralEventProcessor:
                             method_kwargs = {}
                             if processor.python.supports_pizza_tracker:
                                 method_kwargs['pizza_tracker'] = pizza_tracker.pipe_file_name
+                                method_kwargs['pizza_job_id'] = job_id
                             if processor.python.supports_metadata:
                                 method_kwargs['file_metadata'] = metadata
 
