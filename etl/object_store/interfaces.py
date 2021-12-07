@@ -12,11 +12,13 @@ class EventType(Enum):
     Put = 1
     Delete = 2
 
+
 @dataclass
 class ObjectEvent:
     """Represents an implementation-neutral file event"""
     object_id: ObjectId
     event_type: EventType
+
 
 class ObjectStore(abc.ABC):
     """Interface for object store service backend"""
@@ -30,7 +32,7 @@ class ObjectStore(abc.ABC):
         raise NotImplementedError
 
     @abc.abstractmethod
-    def upload_object(self, dest: ObjectId, src_file: str) -> None:
+    def upload_object(self, dest: ObjectId, src_file: str, metadata: Optional[Dict]) -> None:
         """Uploads a file to the object store
         :param dest: destination object
         :param src_file: local path to upload
