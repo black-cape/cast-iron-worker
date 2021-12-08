@@ -5,7 +5,6 @@ import os
 import subprocess
 import tempfile
 import traceback
-from multiprocessing import Process
 from typing import Dict, Optional
 
 from etl.config import settings
@@ -24,8 +23,9 @@ LOGGER = get_logger(__name__)
 ERROR_LOG_SUFFIX = '_error_log_.txt'
 file_suffix_to_ignore = ['.toml', '.keep', ERROR_LOG_SUFFIX]
 
+
 # As per https://stackoverflow.com/questions/19924104/python-multiprocessing-handling-child-errors-in-parent/33599967#33599967
-# needs to bubble exeception up to parent
+# needs to bubble exception up to parent
 class ProcessWithExceptionBubbling(mp.Process):
     def __init__(self, *args, **kwargs):
         mp.Process.__init__(self, *args, **kwargs)
@@ -38,7 +38,7 @@ class ProcessWithExceptionBubbling(mp.Process):
             self._cconn.send(None)
         except Exception as e:
             tb = traceback.format_exc()
-            self._cconn.send((e, tb[0: 4000])) #cap stack trace print to 4000
+            self._cconn.send((e, tb[0: 4000]))  # cap stack trace print to 4000
             # raise e  # You can still rise this exception if you need to
 
     @property
@@ -202,8 +202,7 @@ class GeneralEventProcessor:
                         success = exit_code == 0
 
                     elif processor.python is not None:
-
-                        #pizza tracker has to be called in main thread as it needs things like Kafka connector
+                        # pizza tracker has to be called in main thread as it needs things like Kafka connector
                         run_method = load_python_processor(processor.python)
                         method_kwargs = {}
                         if processor.python.supports_pizza_tracker:
@@ -215,20 +214,21 @@ class GeneralEventProcessor:
                         run_process = ProcessWithExceptionBubbling(target=run_method, args=(local_data_file,), kwargs=method_kwargs)
                         run_process.start()
 
+                        # [WS] check once here to avoid spamming logs
                         if processor.python.supports_pizza_tracker:
-                            LOGGER.info('processor supports pizza tracker, starting tracker process')
+                            LOGGER.debug('processor supports pizza tracker, will start tracker process')
                         else:
                             LOGGER.warning(f'processor {config_object_id} does not support pizza tracker')
 
                         while run_process.is_alive():
-                            run_process.join(0.5)  # block up to 0.5 second each time waiting for complete
+                            run_process.join(0.5)  # block up to 0.5 second each time waiting for processor completion
                             if run_process.exception:
                                 LOGGER.error(
-                                    f'Failed to process file due to, error will also be dumped to location specified '
-                                    f'in ETL processing config if specified{run_process.exception}')
+                                    f'Failed to process file, error will also be dumped to location specified '
+                                    f'in ETL processing config if specified. Error was: {run_process.exception}')
                                 out.write(
-                                    'Failed to proceess due to '
-                                    f'{processor.python.dict()} due to \r\n {run_process.exception}'
+                                    'Failed to process '
+                                    f'{processor.python.dict()} due to: \r\n {run_process.exception}'
                                 )
                                 out.flush()  # without flushing 0 byte gets moved to MINIO
                                 success = False
