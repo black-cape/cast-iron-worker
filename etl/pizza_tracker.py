@@ -30,11 +30,9 @@ class PizzaTracker:
             try:
                 line = self.f_pipe.readline()
                 logger.debug(f'pizza tracker read line: {line}')
-                if not line:
-                    # If there is no data, line is empty string
-                    sleep(1.0)
-                    continue
-                if line.strip() == 'END':
+                if not line or line.strip() == 'END':
+                    # [WS] break out of loop when there's nothing to do or the end is reached. Expects an outer loop
+                    # calling pizza_tracker.process() while processor is alive.
                     break
                 cmd, args = line.strip().split(' ', 1)
                 handler = self.__getattribute__(f'_handle_{cmd.lower()}')
