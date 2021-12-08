@@ -38,7 +38,7 @@ class ProcessWithExceptionBubbling(mp.Process):
             self._cconn.send(None)
         except Exception as e:
             tb = traceback.format_exc()
-            self._cconn.send((e, tb))
+            self._cconn.send((e, tb[0: 4000])) #cap stack trace print to 4000
             # raise e  # You can still rise this exception if you need to
 
     @property
@@ -166,6 +166,8 @@ class GeneralEventProcessor:
                 with open(os.path.join(work_dir, 'out.txt'), 'w') as out, \
                         PizzaTracker(self._message_producer, work_dir, job_id) as pizza_tracker:
 
+                    success = True
+
                     if processor.shell is not None:
                         env = {
                             'DATABASE_HOST': settings.database_host,
@@ -192,46 +194,48 @@ class GeneralEventProcessor:
                             except subprocess.TimeoutExpired:
                                 pass
 
-                            pizza_tracker.process()
-
                             if exit_code is not None:
                                 break
+
+                            pizza_tracker.process()
+
                         success = exit_code == 0
 
                     elif processor.python is not None:
-                        try:
-                            run_method = load_python_processor(processor.python)
-                            method_kwargs = {}
-                            if processor.python.supports_pizza_tracker:
-                                method_kwargs['pizza_tracker'] = pizza_tracker.pipe_file_name
-                                method_kwargs['pizza_job_id'] = job_id
-                            if processor.python.supports_metadata:
-                                method_kwargs['file_metadata'] = metadata
 
-                            run_process = ProcessWithExceptionBubbling(target=run_method, args=(local_data_file,), kwargs=method_kwargs)
-                            run_process.start()
+                        #pizza tracker has to be called in main thread as it needs things like Kafka connector
+                        run_method = load_python_processor(processor.python)
+                        method_kwargs = {}
+                        if processor.python.supports_pizza_tracker:
+                            method_kwargs['pizza_tracker'] = pizza_tracker.pipe_file_name
+                            method_kwargs['pizza_job_id'] = job_id
+                        if processor.python.supports_metadata:
+                            method_kwargs['file_metadata'] = metadata
 
-                            if processor.python.supports_pizza_tracker:
-                                LOGGER.debug('processor supports pizza tracker, starting tracker process now')
-                                pizza_tracker.process()
-                            else:
-                                LOGGER.warning(f'processor {config_object_id} does not support pizza tracker')
+                        run_process = ProcessWithExceptionBubbling(target=run_method, args=(local_data_file,), kwargs=method_kwargs)
+                        run_process.start()
 
-                            run_process.join()
+                        if processor.python.supports_pizza_tracker:
+                            LOGGER.info('processor supports pizza tracker, starting tracker process')
+                        else:
+                            LOGGER.warning(f'processor {config_object_id} does not support pizza tracker')
+
+                        while run_process.is_alive():
+                            run_process.join(0.5)  # block up to 0.5 second each time waiting for complete
                             if run_process.exception:
-                                raise run_process.exception
+                                LOGGER.error(
+                                    f'Failed to process file due to, error will also be dumped to location specified '
+                                    f'in ETL processing config if specified{run_process.exception}')
+                                out.write(
+                                    'Failed to proceess due to '
+                                    f'{processor.python.dict()} due to \r\n {run_process.exception}'
+                                )
+                                out.flush()  # without flushing 0 byte gets moved to MINIO
+                                success = False
+                                break
 
-                            success = True
-                        except Exception as exc:  # pylint: disable=broad-except
-                            LOGGER.error(
-                                f'Failed to process file due to, error will also be dumped to location specified '
-                                f'in ETL processing config if specified{exc}')
-                            out.write(
-                                'Failed to proceess due to '
-                                f'{processor.python.dict()} due to {exc}'
-                            )
-                            out.flush()  # without flushing 0 byte gets moved to MINIO
-                            success = False
+                            if processor.python.supports_pizza_tracker:
+                                pizza_tracker.process()
 
                     else:
                         LOGGER.error('No shell or python configuration set.')
@@ -247,9 +251,11 @@ class GeneralEventProcessor:
                         self._object_store.move_object(processing_file, error_file)
                         self._message_producer.job_evt_status(job_id, 'failure')
 
-                        # Optionally save error log to failed
+                        # Optionally save error log to failed, use same metadata as original file
                         if processor.save_error_log:
-                            self._object_store.upload_object(error_log_file, os.path.join(work_dir, 'out.txt'))
+                            self._object_store.upload_object(dest=error_log_file,
+                                                             src_file=os.path.join(work_dir, 'out.txt'),
+                                                             metadata=metadata)
 
                 # Success or not, we handled this
                 LOGGER.info(f'finished processing {object_id}')

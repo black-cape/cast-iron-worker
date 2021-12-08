@@ -1,7 +1,7 @@
 """Contains the Minio implementation of the object store backend interface"""
 from io import BytesIO
 from pathlib import PurePosixPath
-from typing import Any, Iterable, Optional, Protocol
+from typing import Any, Iterable, Optional, Protocol, Dict
 
 from minio import Minio
 
@@ -67,8 +67,11 @@ class MinioObjectStore(ObjectStore):
     def download_object(self, src: ObjectId, dest_file: str) -> None:
         self._minio_client.fget_object(src.namespace, src.path, dest_file)
 
-    def upload_object(self, dest: ObjectId, src_file: str) -> None:
-        self._minio_client.fput_object(dest.namespace, dest.path, src_file)
+    def upload_object(self, dest: ObjectId, src_file: str, metadata: Optional[Dict]) -> None:
+        self._minio_client.fput_object(bucket_name=dest.namespace,
+                                       object_name=dest.path,
+                                       file_path=src_file,
+                                       metadata=metadata)
 
     def read_object(self, obj: ObjectId) -> bytes:
         response: Optional[MinioObjectResponse] = None
