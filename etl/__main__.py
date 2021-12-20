@@ -1,11 +1,14 @@
 """Entry point for ETL worker"""
 from typing import AsyncIterable, Dict, List
+import logging.config
 
 from etl.config import settings
 from etl.event_processor import GeneralEventProcessor, EtlConfigEventProcessor
 from etl.messaging.kafka_producer import KafkaMessageProducer
 from etl.object_store.minio import MinioObjectStore
 from etl.tasking.faust import FaustTaskSink, FaustAppConfig
+
+logging.config.fileConfig(settings.logging_conf_file)
 
 faust_app_configs: List[FaustAppConfig] = []
 
