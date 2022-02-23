@@ -15,9 +15,9 @@ from etl.object_store.interfaces import EventType, ObjectStore
 from etl.object_store.object_id import ObjectId
 from etl.path_helpers import (filename, get_archive_path, get_error_path,
                               get_inbox_path, get_processing_path,
-                              glob_matches, parent, rename)
+                              processor_matches, parent, rename)
 from etl.pizza_tracker import PizzaTracker
-from etl.util import get_logger, short_uuid
+from etl.util import create_rest_client, get_logger, short_uuid
 
 LOGGER = get_logger(__name__)
 ERROR_LOG_SUFFIX = '_error_log_.txt'
@@ -46,6 +46,7 @@ class ProcessWithExceptionBubbling(mp.Process):
         if self._pconn.poll():
             self._exception = self._pconn.recv()
         return self._exception
+
 
 class EtlConfigEventProcessor:
     """A service that processes individual object events"""
@@ -113,6 +114,7 @@ class GeneralEventProcessor:
     def __init__(self, object_store: ObjectStore, message_producer: MessageProducer):
         self._object_store = object_store
         self._message_producer = message_producer
+        self._rest_client = create_rest_client()
 
     def process(self, evt_data: Dict) -> None:
         """Object event process entry point"""
@@ -137,8 +139,13 @@ class GeneralEventProcessor:
 
         for config_object_id, processor in EtlConfigEventProcessor.processors.items():
 
-            if (parent(object_id) != get_inbox_path(config_object_id, processor) or
-                    not glob_matches(object_id, config_object_id, processor)):
+            if (
+                parent(object_id) != get_inbox_path(config_object_id, processor) or
+                not processor_matches(
+                    object_id, config_object_id, processor, self._object_store, self._rest_client,
+                    settings.tika_host, settings.enable_tika
+                )
+            ):
                 # File isn't in our inbox directory or filename doesn't match our glob pattern
                 continue
 
@@ -211,7 +218,11 @@ class GeneralEventProcessor:
                         if processor.python.supports_metadata:
                             method_kwargs['file_metadata'] = metadata
 
-                        run_process = ProcessWithExceptionBubbling(target=run_method, args=(local_data_file,), kwargs=method_kwargs)
+                        run_process = ProcessWithExceptionBubbling(
+                            target=run_method,
+                            args=(local_data_file,),
+                            kwargs=method_kwargs
+                        )
                         run_process.start()
 
                         # [WS] check once here to avoid spamming logs
