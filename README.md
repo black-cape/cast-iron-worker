@@ -52,9 +52,10 @@ With the docker containers running and the worker running in either a container 
 1. TSV moves to the `archive_dir` bucket
 
 ### Matching files to processors
-The setting `handled_file_glob` configures file extension pattern matching. The matchers should be provided as e.g. `_test.tsv|_updated.csv|.mp3` (no spaces).
+The processor config `handled_file_glob` configures file extension pattern matching. The matchers should be provided as e.g. `_test.tsv|_updated.csv|.mp3` (no spaces).
 
-The settings `handled_mimetypes` specifies Tika mimetypes for a processor to match. Its value should be a comma-separated string of mimetypes, e.g. `application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document`
+The processor config `handled_mimetypes` specifies Tika mimetypes for a processor to match. Its value should be a comma-separated string of mimetypes, e.g. `application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document`
+* Note: in order to enable Tika mimetype matching, the environment setting `ENABLE_TIKA` must be set to a truthy value. See the `Settings` section below for details about environment settings.
 
 Files are matched to processors as such: for a single file, checks are made based on processor configurations, one processor at a time.
 * The first processor that is found to match the file is used to process the file, and the rest are ignored.
