@@ -51,8 +51,17 @@ With the docker containers running and the worker running in either a container 
 1. TSV should be ETL-ed
 1. TSV moves to the `archive_dir` bucket
 
-### File glob pattern matching
-For `handled_file_glob` pattern matching, the matchers should be provided as `_test.tsv|_updated.csv|.mp3` (no spaces).
+### Matching files to processors
+The setting `handled_file_glob` configures file extension pattern matching. The matchers should be provided as e.g. `_test.tsv|_updated.csv|.mp3` (no spaces).
+
+The settings `handled_mimetypes` specifies Tika mimetypes for a processor to match. Its value should be a comma-separated string of mimetypes, e.g. `application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document`
+
+Files are matched to processors as such: for a single file, checks are made based on processor configurations, one processor at a time.
+* The first processor that is found to match the file is used to process the file, and the rest are ignored.
+  * So if two processors could have each matched a file, the order in which the processors are checked determines which matches and which is ignored. 
+* One or the other, or both, of `handled_mimetypes` and `handled_file_glob` can be specified for a processor.
+  * If both are specified, mimetype checking is tried first, then file extension glob if mimetype failed or returned False for that processor.
+  * Each processor will check both mimetype and file extension glob matching before moving on to the next processor.
 
 ## Technology
 
