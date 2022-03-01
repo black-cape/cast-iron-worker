@@ -1,6 +1,8 @@
 """
 The config module contains logic for loading, parsing, and formatting faust configuration.
 """
+from typing import Dict, Optional
+
 from pydantic import BaseSettings
 
 
@@ -36,6 +38,13 @@ class Settings(BaseSettings):
 
     logging_conf_file: str = 'logging.conf'
     log_level: str = 'debug'
+
+    # Tika service settings
+    connection_params: Optional[Dict]
+    client_cert: Optional[str]
+    client_key: Optional[str]
+    enable_tika: bool = False
+    tika_host: str = 'localhost:9998'
 
 
 settings = Settings()
