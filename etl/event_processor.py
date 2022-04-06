@@ -8,6 +8,7 @@ import traceback
 from typing import Dict, Optional
 
 from etl.config import settings
+from etl.database.database import PoolDatabase
 from etl.file_processor_config import (FileProcessorConfig,
                                        load_python_processor, try_loads)
 from etl.messaging.interfaces import MessageProducer
@@ -111,13 +112,16 @@ class EtlConfigEventProcessor:
 class GeneralEventProcessor:
     """A service that processes individual object events"""
 
-    def __init__(self, object_store: ObjectStore, message_producer: MessageProducer):
+    def __init__(self, object_store: ObjectStore, message_producer: MessageProducer, database: PoolDatabase):
         self._object_store = object_store
         self._message_producer = message_producer
         self._rest_client = create_rest_client()
+        self._database = database
 
     def process(self, evt_data: Dict) -> None:
         """Object event process entry point"""
+        LOGGER.info(f'Event: {evt_data}')
+        db_evt = self._database.parse_notification(evt_data)
         evt = self._object_store.parse_notification(evt_data)
         # this processor would get TOML config as well as regular file upload, there doesn't seem to be a way
         # to filter bucket notification to exclude by file path

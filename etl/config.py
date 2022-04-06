@@ -15,11 +15,11 @@ class Settings(BaseSettings):
     consumer_grp_etl_config = 'etl-config-grp'
     consumer_grp_etl_source_file = 'etl-source-file-grp'
 
-    database_host: str = 'localhost'
+    database_host: str = 'postgres'
     database_password: str = '12345678'  # Default for local debugging
     database_port: int = 5432
     database_user: str = 'castiron'
-    database_table: str = 'castiron'
+    database_db: str = 'castiron'
 
     kafka_broker: str = 'localhost:9092'
     kafka_topic_castiron_etl_config = 'castiron_etl_config'

@@ -4,6 +4,7 @@ from pathlib import PurePosixPath
 from typing import Any, Iterable, Optional, Protocol, Dict
 
 from minio import Minio
+from minio.notificationconfig import NotificationConfig, QueueConfig, SuffixFilterRule
 
 from etl.config import settings
 from etl.object_store.interfaces import EventType, ObjectEvent, ObjectStore
@@ -22,28 +23,21 @@ class MinioObjectResponse(Protocol):
 # Filter exclude suffix .toml.   But this is not supported by S3 https://github.com/minio/minio/issues/8217
 #hence the notification with etl_file_upload_notification is going to get everything, and we have to rely on
 #application level filtering
-notification_configs = {'QueueConfigurations': [
-    {
-        'Id': 'etl_file_upload_notification',
-        'Arn': settings.minio_notification_arn_etl_source_file,
-        'Events': ['s3:ObjectCreated:*', 's3:ObjectRemoved:*']
-    },
-    {
-        'Id': 'etl_config_upload_notification',
-        'Arn': settings.minio_notification_arn_etl_config,
-        'Events': ['s3:ObjectCreated:*', 's3:ObjectRemoved:*'],
-        'Filter': {
-            'Key': {
-                'FilterRules': [
-                    {
-                        'Name': 'suffix',
-                        'Value': '.toml'
-                    }
-                ]
-            }
-        }
-    }
-]}
+notification_configs = NotificationConfig(
+    queue_config_list=[
+        QueueConfig(
+            settings.minio_notification_arn_etl_source_file,
+            ['s3:ObjectCreated:*', 's3:ObjectRemoved:*'],
+            config_id='etl_file_upload_notification',
+        ),
+        QueueConfig(
+            settings.minio_notification_arn_etl_config,
+            ['s3:ObjectCreated:*', 's3:ObjectRemoved:*'],
+            config_id='etl_config_upload_notification',
+            suffix_filter_rule=SuffixFilterRule('.toml'),
+        ),
+    ],
+)
 
 
 
