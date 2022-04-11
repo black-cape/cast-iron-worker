@@ -5,12 +5,15 @@ from typing import Any, Iterable, Optional, Protocol, Dict
 
 from minio import Minio
 from minio.notificationconfig import NotificationConfig, QueueConfig, SuffixFilterRule
+from minio.commonconfig import REPLACE, CopySource
 
 from etl.config import settings
 from etl.object_store.interfaces import EventType, ObjectEvent, ObjectStore
 from etl.object_store.object_id import ObjectId
+from etl.util import get_logger
 
 KEEP_FILENAME = '.keep'
+LOGGER = get_logger(__name__)
 
 class MinioObjectResponse(Protocol):
     """A duck type interface describing the minio object response"""
@@ -81,8 +84,17 @@ class MinioObjectStore(ObjectStore):
     def write_object(self, obj: ObjectId, data: bytes) -> None:
         self._minio_client.put_object(obj.namespace, obj.path, BytesIO(data), len(data))
 
-    def move_object(self, src: ObjectId, dest: ObjectId) -> None:
-        self._minio_client.copy_object(dest.namespace, dest.path, f'{src.namespace}/{src.path}')
+    def move_object(self, src: ObjectId, dest: ObjectId, metadata: Optional[dict] = None) -> None:
+        if metadata:
+            self._minio_client.copy_object(
+                                dest.namespace,
+                                dest.path, 
+                                CopySource(src.namespace, src.path),
+                                metadata=metadata,
+                                metadata_directive=REPLACE,
+            )
+        else:
+            self._minio_client.copy_object(dest.namespace, dest.path, CopySource(src.namespace, src.path))
         self._minio_client.remove_object(src.namespace, src.path)
 
     def delete_object(self, obj: ObjectId) -> None:
@@ -97,7 +109,14 @@ class MinioObjectStore(ObjectStore):
         bucket_name, file_name = evt_data['Key'].split('/', 1)
         object_id = ObjectId(bucket_name, file_name)
         event_type = EventType.Delete if evt_data['EventName'].startswith('s3:ObjectRemoved') else EventType.Put
-        return ObjectEvent(object_id, event_type)
+        metadata = evt_data['Records'][0]['s3']['object'].get('userMetadata', None)
+        original_filename = None
+        event_status = None
+        if metadata:
+            original_filename = metadata.get('X-Amz-Meta-Originalfilename', None)
+            event_status = metadata.get('X-Amz-Meta-Status', None)
+
+        return ObjectEvent(object_id, event_type, original_filename, event_status)
 
     def list_objects(self, namespace: str, path: Optional[str] = None, recursive=False) -> Iterable[ObjectId]:
         for minio_object in self._minio_client.list_objects(namespace, path, recursive):

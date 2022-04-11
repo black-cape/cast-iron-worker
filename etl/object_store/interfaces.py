@@ -18,6 +18,8 @@ class ObjectEvent:
     """Represents an implementation-neutral file event"""
     object_id: ObjectId
     event_type: EventType
+    original_filename: str
+    event_status: str
 
 
 class ObjectStore(abc.ABC):
@@ -55,7 +57,7 @@ class ObjectStore(abc.ABC):
         raise NotImplementedError
 
     @abc.abstractmethod
-    def move_object(self, src: ObjectId, dest: ObjectId) -> None:
+    def move_object(self, src: ObjectId, dest: ObjectId, metadata: Optional[dict]) -> None:
         """Moves an object to a new path or namespace
         :param src: source location
         :param dest: destination location

@@ -1,16 +1,10 @@
 """Describes interface for sending messages to a message broker"""
 import abc
-from asyncpg import Pool
 from typing import Any, Dict, List, Optional
 
 
 class DatabaseStore(abc.ABC):
     """Interface for message producer backend"""
-
-    async def db_pool(self) -> Pool:
-        """Create a DB Connection Pool
-        """
-        raise NotImplementedError
 
     async def insert_file(self, filedata: dict) -> None:
         """Insert a file record
@@ -22,6 +16,13 @@ class DatabaseStore(abc.ABC):
         """Rename a file record
         :param id: The id 
         :param newName: New path value
+        """
+        raise NotImplementedError
+
+    async def update_status(self, id: str, newStatus: str, newFilename: str) -> None:
+        """Rename a file record
+        :param id: The id 
+        :param newStatus: New status value
         """
         raise NotImplementedError
 

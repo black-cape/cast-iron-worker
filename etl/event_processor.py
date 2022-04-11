@@ -6,9 +6,11 @@ import subprocess
 import tempfile
 import traceback
 from typing import Dict, Optional
+from pathlib import Path
+from uuid import uuid4
 
 from etl.config import settings
-from etl.database.database import PoolDatabase
+from etl.database.database import PGDatabase
 from etl.file_processor_config import (FileProcessorConfig,
                                        load_python_processor, try_loads)
 from etl.messaging.interfaces import MessageProducer
@@ -112,16 +114,21 @@ class EtlConfigEventProcessor:
 class GeneralEventProcessor:
     """A service that processes individual object events"""
 
-    def __init__(self, object_store: ObjectStore, message_producer: MessageProducer, database: PoolDatabase):
+    def __init__(self, object_store: ObjectStore, message_producer: MessageProducer):
         self._object_store = object_store
         self._message_producer = message_producer
         self._rest_client = create_rest_client()
-        self._database = database
+        self._database = PGDatabase()
+        self._database_active = False
 
-    def process(self, evt_data: Dict) -> None:
+    async def process(self, evt_data: Dict) -> None:
         """Object event process entry point"""
-        LOGGER.info(f'Event: {evt_data}')
-        db_evt = self._database.parse_notification(evt_data)
+
+        # Check for database connection
+        if not self._database_active:
+            self._database_active = await self._database.create_table()
+        db_evt = {}
+
         evt = self._object_store.parse_notification(evt_data)
         # this processor would get TOML config as well as regular file upload, there doesn't seem to be a way
         # to filter bucket notification to exclude by file path
@@ -131,9 +138,34 @@ class GeneralEventProcessor:
             if evt.event_type == EventType.Delete:
                 pass
             elif evt.event_type == EventType.Put:
-                self._file_put(evt.object_id)
+                if evt.original_filename:
+                    if not evt.event_status:
+                        if self._database_active:
+                            db_evt = self._database.parse_notification(evt_data)
+                            try:
+                                await self._database.insert_file(db_evt)
+                            except Exception as e:
+                                LOGGER.error(f'Database error.  Unable to process/track file.  Exception: {e}')
+                        await self._file_put(evt.object_id, db_evt.get('id', None))
+                else:
+                    # New object. "Rename" object.
+                    obj_path = Path(evt.object_id.path)
+                    dirpath = obj_path.parent
+                    filename = obj_path.name
+                    obj_uuid = str(uuid4())
+                    new_path = f'{dirpath}/{obj_uuid}-{filename}'
+                    dest_object_id = ObjectId(evt.object_id.namespace, f'{new_path}')
+                    
+                    metadata = evt_data['Records'][0]['s3']['object'].get('userMetadata', {})
+                    metadata['originalFilename'] = filename
+                    metadata['id'] = obj_uuid
 
-    def _file_put(self, object_id: ObjectId) -> bool:
+                    self._object_store.move_object(evt.object_id, dest_object_id, metadata)
+
+
+
+
+    async def _file_put(self, object_id: ObjectId, uuid: str) -> bool:
         """Handle possible data file puts.
         :return: True if successful.
         """
@@ -142,7 +174,6 @@ class GeneralEventProcessor:
         LOGGER.info(f'number of ETL processing configs now {len(EtlConfigEventProcessor.processors)}')
 
         for config_object_id, processor in EtlConfigEventProcessor.processors.items():
-
             if (
                 parent(object_id) != get_inbox_path(config_object_id, processor) or
                 not processor_matches(
@@ -166,13 +197,16 @@ class GeneralEventProcessor:
             self._message_producer.job_created(job_id, filename(object_id), filename(config_object_id), 'castiron')
 
             # mv to processing
-            self._object_store.move_object(object_id, processing_file)
+            metadata = self._object_store.retrieve_object_metadata(object_id)
+            metadata['status'] = 'Processing'
+            self._object_store.move_object(object_id, processing_file, metadata)
+            newFilename = f'{processing_file.namespace}/{object_id.path}'
+            await self._database.update_status(uuid, 'Processing', newFilename)
 
             with tempfile.TemporaryDirectory() as work_dir:
                 # Download to local temp working directory
                 local_data_file = os.path.join(work_dir, filename(object_id))
                 self._object_store.download_object(processing_file, local_data_file)
-                metadata = self._object_store.retrieve_object_metadata(processing_file)
 
                 with open(os.path.join(work_dir, 'out.txt'), 'w') as out, \
                         PizzaTracker(self._message_producer, work_dir, job_id) as pizza_tracker:
@@ -259,11 +293,17 @@ class GeneralEventProcessor:
                     if success:
                         # Success. mv to archive
                         if archive_file:
-                            self._object_store.move_object(processing_file, archive_file)
+                            metadata['status'] = 'Success'
+                            self._object_store.move_object(processing_file, archive_file, metadata)
+                        newFilename = f'{archive_file.namespace}/{object_id.path}'
+                        await self._database.update_status(uuid, 'Success', newFilename)
                         self._message_producer.job_evt_status(job_id, 'success')
                     else:
                         # Failure. mv to failed
-                        self._object_store.move_object(processing_file, error_file)
+                        metadata['status'] = 'Failed'
+                        self._object_store.move_object(processing_file, error_file, metadata)
+                        newFilename = f'{error_file.namespace}/{object_id.path}'
+                        await self._database.update_status(uuid, 'Failed', newFilename)
                         self._message_producer.job_evt_status(job_id, 'failure')
 
                         # Optionally save error log to failed, use same metadata as original file
