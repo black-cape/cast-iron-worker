@@ -1,11 +1,12 @@
 """Contains the Minio implementation of the object store backend interface"""
 from io import BytesIO
 from pathlib import PurePosixPath
-from typing import Any, Iterable, Optional, Protocol, Dict
+from typing import Any, Dict, Iterable, Optional, Protocol
 
 from minio import Minio
-from minio.notificationconfig import NotificationConfig, QueueConfig, SuffixFilterRule
 from minio.commonconfig import REPLACE, CopySource
+from minio.notificationconfig import (NotificationConfig, QueueConfig,
+                                      SuffixFilterRule)
 
 from etl.config import settings
 from etl.object_store.interfaces import EventType, ObjectEvent, ObjectStore

@@ -5,8 +5,8 @@ import os
 import subprocess
 import tempfile
 import traceback
-from typing import Dict, Optional
 from pathlib import Path
+from typing import Dict, Optional
 from uuid import uuid4
 
 from etl.config import settings
@@ -17,8 +17,8 @@ from etl.messaging.interfaces import MessageProducer
 from etl.object_store.interfaces import EventType, ObjectStore
 from etl.object_store.object_id import ObjectId
 from etl.path_helpers import (filename, get_archive_path, get_error_path,
-                              get_inbox_path, get_processing_path,
-                              processor_matches, parent, rename)
+                              get_inbox_path, get_processing_path, parent,
+                              processor_matches, rename)
 from etl.pizza_tracker import PizzaTracker
 from etl.util import create_rest_client, get_logger, short_uuid
 
@@ -27,9 +27,9 @@ ERROR_LOG_SUFFIX = '_error_log_.txt'
 file_suffix_to_ignore = ['.toml', '.keep', ERROR_LOG_SUFFIX]
 
 
-# As per https://stackoverflow.com/questions/19924104/python-multiprocessing-handling-child-errors-in-parent/33599967#33599967
-# needs to bubble exception up to parent
+# As per stackoverflow.com needs to bubble exception up to parent
 class ProcessWithExceptionBubbling(mp.Process):
+    """ Class the handles multiprocessing with exception bubbling """
     def __init__(self, *args, **kwargs):
         mp.Process.__init__(self, *args, **kwargs)
         self._pconn, self._cconn = mp.Pipe()
@@ -46,6 +46,7 @@ class ProcessWithExceptionBubbling(mp.Process):
 
     @property
     def exception(self):
+        """ Exception bubbling """
         if self._pconn.poll():
             self._exception = self._pconn.recv()
         return self._exception
@@ -54,7 +55,7 @@ class ProcessWithExceptionBubbling(mp.Process):
 class EtlConfigEventProcessor:
     """A service that processes individual object events"""
     # cached list of processor configs, needs to be accessed outside of ths class
-    processors: Dict[ObjectId, FileProcessorConfig] = dict()
+    processors: Dict[ObjectId, FileProcessorConfig] = {}
 
     def __init__(self, object_store: ObjectStore):
         self._object_store = object_store
@@ -88,7 +89,7 @@ class EtlConfigEventProcessor:
             if cfg.enabled:
                 # Register processor
                 EtlConfigEventProcessor.processors[toml_object_id] = cfg
-                LOGGER.info(f'number of processor configs: {len(EtlConfigEventProcessor.processors)}')
+                LOGGER.info('number of processor configs: %s', len(EtlConfigEventProcessor.processors))
                 for processor_key in EtlConfigEventProcessor.processors.keys():
                     LOGGER.info(processor_key)
 
@@ -155,7 +156,7 @@ class GeneralEventProcessor:
                     obj_uuid = str(uuid4())
                     new_path = f'{dirpath}/{obj_uuid}-{filename}'
                     dest_object_id = ObjectId(evt.object_id.namespace, f'{new_path}')
-                    
+
                     metadata = evt_data['Records'][0]['s3']['object'].get('userMetadata', {})
                     metadata['originalFilename'] = filename
                     metadata['id'] = obj_uuid

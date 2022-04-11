@@ -1,6 +1,7 @@
 """Contains the Minio implementation of the object store backend interface"""
-from datetime import datetime
 import json
+from datetime import datetime
+from sqlite3 import DatabaseError
 from typing import Any, Optional
 
 from asyncpg_utils.databases import PoolDatabase
@@ -20,6 +21,7 @@ class PGDatabase(DatabaseStore):
         self._table_manager = TableManager(self._database, 'files', pk_field='id', hooks=None)
 
     async def create_table(self) -> bool:
+        """ Check for and create database table """
         LOGGER.info('Creating DB table...')
         try:
             await self._database.init_pool()
@@ -47,40 +49,47 @@ class PGDatabase(DatabaseStore):
             )
             await conn.close()
             return True
-        except Exception as e:
-            LOGGER.info(f'Database not active.  Exception: {e}')
+        except DatabaseError as db_error:
+            LOGGER.info('Database not active.  Exception: %s', db_error)
             return False
-    
+
     async def insert_file(self, filedata: dict):
+        """ Track a new file from Minio"""
         LOGGER.info("Inserting file into DB...")
         await self._database.insert('files', filedata)
 
-    async def move_file(self, id: str, newName: str):
+    async def move_file(self, rowid: str, new_name: str):
+        """ Track the moving of a file in Minio"""
         rec_data = {}
-        rec_data['path'] = newName
+        rec_data['path'] = new_name
         rec_data['update_datetime'] = f'{datetime.now().isoformat()}Z'
-        await self._table_manager.update(id, rec_data)
+        await self._table_manager.update(rowid, rec_data)
 
-    async def delete_file(self, id: str):
-        await self._table_manager.delete(id)
+    async def delete_file(self, rowid: str):
+        """ Track the deleting of a file in Minio"""
+        await self._table_manager.delete(rowid)
 
     async def list_files(self, metadata: Optional[dict]):
+        """ List all tracked files by provided filter """
         return await self._table_manager.list(filters=metadata)
-        
-    async def retrieve_file_metadata(self, id: str):
-        return await self._table_manager.detail(id)
 
-    async def update_status(self, id: str, newStatus: str, newFilename: str):
+    async def retrieve_file_metadata(self, rowid: str):
+        """ Retrieve a row based on ID """
+        return await self._table_manager.detail(rowid)
+
+    async def update_status(self, rowid: str, new_status: str, new_filename: str):
+        """ Update the file status/state """
         rec_data = {}
-        rec_data['status'] = newStatus
-        rec_data['file_name'] = newFilename
+        rec_data['status'] = new_status
+        rec_data['file_name'] = new_filename
         rec_data['update_datetime'] = datetime.now()
-        await self._table_manager.update(id, rec_data)
+        await self._table_manager.update(rowid, rec_data)
 
     def parse_notification(self, evt_data: Any):
+        """ Parse a Minio notification to create a DB row """
         LOGGER.info(evt_data)
         bucket_name, file_name = evt_data['Key'].split('/', 1)
-        metadata = evt_data['Records'][0]['s3']['object'].get('userMetadata', None) 
+        metadata = evt_data['Records'][0]['s3']['object'].get('userMetadata', None)
         db_evt = {
             'id': metadata.get('X-Amz-Meta-Id', None),
             'bucket_name': bucket_name,

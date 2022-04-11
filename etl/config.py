@@ -10,8 +10,8 @@ class Settings(BaseSettings):
     """Settings derived from command line, environment variables, .env file or defaults """
 
     # Consumer group, also used as FAUST APP ID
-    # we want this to operate in pub/sub mode so all cast iron worker instance gets a same copy of config, hence
-    # this should be overwritten to be different per worker
+    # we want this to operate in pub/sub mode so all cast iron worker instance gets a same copy of
+    #  config, hence this should be overwritten to be different per worker
     consumer_grp_etl_config = 'etl-config-grp'
     consumer_grp_etl_source_file = 'etl-source-file-grp'
 

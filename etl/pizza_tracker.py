@@ -3,7 +3,6 @@ Provides handling of pipe-based ETL shell status notification
 """
 import os
 from io import BufferedReader, FileIO, TextIOWrapper
-from time import sleep
 
 from etl.messaging.interfaces import MessageProducer
 from etl.util import get_logger
@@ -29,10 +28,10 @@ class PizzaTracker:
         while True:
             try:
                 line = self.f_pipe.readline()
-                logger.debug(f'pizza tracker read line: {line}')
+                logger.debug('pizza tracker read line: %s', line)
                 if not line or line.strip() == 'END':
-                    # [WS] break out of loop when there's nothing to do or the end is reached. Expects an outer loop
-                    # calling pizza_tracker.process() while processor is alive.
+                    # [WS] break out of loop when there's nothing to do or the end is reached
+                    # Expects an outer loop calling pizza_tracker.process() while processor is alive
                     break
                 cmd, args = line.strip().split(' ', 1)
                 handler = self.__getattribute__(f'_handle_{cmd.lower()}')
@@ -71,13 +70,15 @@ class PizzaTracker:
                     pass
 
         if progress is not None and 0.0 <= progress <= 1.0:
-            logger.debug(f'pizza tracker is logging progress to kafka. job_id: {self.job_id}, progress: {progress}')
+            logger.debug('pizza tracker is logging progress to kafka. job_id: %s, progress: %s',
+            self.job_id, progress)
             self.message_producer.job_evt_progress(self.job_id, progress)
 
     def __enter__(self):
         os.mkfifo(self.pipe_file_name)
         self.f_pipe = TextIOWrapper(
-            BufferedReader(FileIO(os.open(self.pipe_file_name, os.O_RDONLY | os.O_NONBLOCK), mode='r'))
+            BufferedReader(FileIO(os.open(self.pipe_file_name,
+                                          os.O_RDONLY | os.O_NONBLOCK), mode='r'))
         )
         return self
 

@@ -12,23 +12,23 @@ class DatabaseStore(abc.ABC):
         """
         raise NotImplementedError
 
-    async def move_file(self, id: str, newName: str) -> None:        
+    async def move_file(self, rowid: str, new_name: str) -> None:
         """Rename a file record
-        :param id: The id 
+        :param id: The id
         :param newName: New path value
         """
         raise NotImplementedError
 
-    async def update_status(self, id: str, newStatus: str, newFilename: str) -> None:
+    async def update_status(self, rowid: str, new_status: str, new_filename: str) -> None:
         """Rename a file record
-        :param id: The id 
+        :param id: The id
         :param newStatus: New status value
         """
         raise NotImplementedError
 
-    async def delete_file(self, id: str) -> None:
+    async def delete_file(self, rowid: str) -> None:
         """Delete a record
-        :param id: The id 
+        :param id: The id
         """
         raise NotImplementedError
 
@@ -37,15 +37,15 @@ class DatabaseStore(abc.ABC):
         :param metadata: Dict containing query restrictions
         """
         raise NotImplementedError
-        
-    async def retrieve_file_metadata(self, id: str) -> dict:
+
+    async def retrieve_file_metadata(self, rowid: str) -> dict:
         """Retrieve a row based on ID
-        :param id: The id 
+        :param id: The id
         """
         raise NotImplementedError
 
     def parse_notification(self, evt_data: Any) -> Dict:
         """Parse the event into a DB row/dict
-        :param evt_data: The event data from S3/Minio 
+        :param evt_data: The event data from S3/Minio
         """
         raise NotImplementedError
