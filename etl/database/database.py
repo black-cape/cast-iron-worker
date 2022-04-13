@@ -2,13 +2,13 @@
 import json
 from datetime import datetime
 from sqlite3 import DatabaseError
-from typing import Any, Optional
+from typing import Any, Dict, Optional
 
 from asyncpg_utils.databases import PoolDatabase
 from asyncpg_utils.managers import TableManager
 
 from etl.config import settings
-from etl.database.interfaces import DatabaseStore
+from etl.database.interfaces import DatabaseStore, FileObject
 from etl.util import get_logger
 
 LOGGER = get_logger(__name__)
@@ -53,10 +53,10 @@ class PGDatabase(DatabaseStore):
             LOGGER.info('Database not active.  Exception: %s', db_error)
             return False
 
-    async def insert_file(self, filedata: dict):
+    async def insert_file(self, filedata: FileObject):
         """ Track a new file from Minio"""
         LOGGER.info("Inserting file into DB...")
-        await self._database.insert('files', filedata)
+        await self._database.insert('files', dict(filedata))
 
     async def move_file(self, rowid: str, new_name: str):
         """ Track the moving of a file in Minio"""
@@ -69,7 +69,7 @@ class PGDatabase(DatabaseStore):
         """ Track the deleting of a file in Minio"""
         await self._table_manager.delete(rowid)
 
-    async def list_files(self, metadata: Optional[dict]):
+    async def list_files(self, metadata: Optional[Dict]):
         """ List all tracked files by provided filter """
         return await self._table_manager.list(filters=metadata)
 

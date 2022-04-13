@@ -57,7 +57,7 @@ class ObjectStore(abc.ABC):
         raise NotImplementedError
 
     @abc.abstractmethod
-    def move_object(self, src: ObjectId, dest: ObjectId, metadata: Optional[dict]) -> None:
+    def move_object(self, src: ObjectId, dest: ObjectId, metadata: Optional[Dict]) -> None:
         """Moves an object to a new path or namespace
         :param src: source location
         :param dest: destination location
@@ -95,7 +95,7 @@ class ObjectStore(abc.ABC):
         raise NotImplementedError
 
     @abc.abstractmethod
-    def retrieve_object_metadata(self, src: ObjectId) -> dict:
+    def retrieve_object_metadata(self, src: ObjectId) -> Dict:
         """Retrieve the metadata for an object.
         :param src: source object
         """
