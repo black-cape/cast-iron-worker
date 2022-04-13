@@ -85,7 +85,7 @@ class MinioObjectStore(ObjectStore):
     def write_object(self, obj: ObjectId, data: bytes) -> None:
         self._minio_client.put_object(obj.namespace, obj.path, BytesIO(data), len(data))
 
-    def move_object(self, src: ObjectId, dest: ObjectId, metadata: Optional[dict] = None) -> None:
+    def move_object(self, src: ObjectId, dest: ObjectId, metadata: Optional[Dict] = None) -> None:
         if metadata:
             self._minio_client.copy_object(
                                 dest.namespace,
