@@ -3,6 +3,7 @@ import json
 from datetime import datetime
 from sqlite3 import DatabaseError
 from typing import Any, Dict, Optional
+from asyncpg import InvalidPasswordError
 
 from asyncpg_utils.databases import PoolDatabase
 from asyncpg_utils.managers import TableManager
@@ -49,7 +50,7 @@ class PGDatabase(DatabaseStore):
             )
             await conn.close()
             return True
-        except DatabaseError as db_error:
+        except (DatabaseError, InvalidPasswordError) as db_error:
             LOGGER.info('Database not active.  Exception: %s', db_error)
             return False
 
