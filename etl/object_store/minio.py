@@ -60,7 +60,6 @@ class MinioObjectStore(ObjectStore):
             self._minio_client.make_bucket(settings.minio_etl_bucket)
 
         self._minio_client.set_bucket_notification(settings.minio_etl_bucket, notification_configs)
-        self._minio_client.get_bucket_notification(settings.minio_etl_bucket)
 
     def download_object(self, src: ObjectId, dest_file: str) -> None:
         self._minio_client.fget_object(src.namespace, src.path, dest_file)

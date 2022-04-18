@@ -201,8 +201,7 @@ class GeneralEventProcessor:
             metadata = self._object_store.retrieve_object_metadata(object_id)
             metadata['status'] = 'Processing'
             self._object_store.move_object(object_id, processing_file, metadata)
-            newFilename = f'{processing_file.namespace}/{object_id.path}'
-            await self._database.update_status(uuid, 'Processing', newFilename)
+            await self._database.update_status(uuid, 'Processing', processing_file.path)
 
             with tempfile.TemporaryDirectory() as work_dir:
                 # Download to local temp working directory
@@ -296,15 +295,13 @@ class GeneralEventProcessor:
                         if archive_file:
                             metadata['status'] = 'Success'
                             self._object_store.move_object(processing_file, archive_file, metadata)
-                        newFilename = f'{archive_file.namespace}/{object_id.path}'
-                        await self._database.update_status(uuid, 'Success', newFilename)
+                        await self._database.update_status(uuid, 'Success', archive_file.path)
                         self._message_producer.job_evt_status(job_id, 'success')
                     else:
                         # Failure. mv to failed
                         metadata['status'] = 'Failed'
                         self._object_store.move_object(processing_file, error_file, metadata)
-                        newFilename = f'{error_file.namespace}/{object_id.path}'
-                        await self._database.update_status(uuid, 'Failed', newFilename)
+                        await self._database.update_status(uuid, 'Failed', error_file.path)
                         self._message_producer.job_evt_status(job_id, 'failure')
 
                         # Optionally save error log to failed, use same metadata as original file
