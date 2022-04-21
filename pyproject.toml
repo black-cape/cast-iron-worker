@@ -6,12 +6,13 @@ authors = ["Jeremy Nelissen <jeremy@blackcape.io>"]
 
 [tool.poetry.dependencies]
 python = "^3.8"
-faust = "^1.10.4"
+faust = ">=1.10.4"
 kafka-python = "<2.0.0"
-minio = "^6.0.0"
-pydantic = "^1.6.1"
-toml = "^0.10.1"
-requests = "^2.27.1"
+minio = ">=6.0.0"
+pydantic = ">=1.6.1"
+toml = ">=0.10.1"
+requests = ">=2.27.1"
+asyncpg-utils = "^0.6.0"
 
 [tool.poetry.dev-dependencies]
 autopep8 = "^1.5.4"

@@ -2,10 +2,11 @@
 import base64
 import logging
 import uuid
+from typing import Optional, Tuple
+
 from requests import Response
 from requests.adapters import HTTPAdapter
 from requests.sessions import Session
-from typing import Optional, Tuple
 
 from etl.config import settings
 

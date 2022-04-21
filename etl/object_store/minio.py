@@ -1,15 +1,20 @@
 """Contains the Minio implementation of the object store backend interface"""
 from io import BytesIO
 from pathlib import PurePosixPath
-from typing import Any, Iterable, Optional, Protocol, Dict
+from typing import Any, Dict, Iterable, Optional, Protocol
 
 from minio import Minio
+from minio.commonconfig import REPLACE, CopySource
+from minio.notificationconfig import (NotificationConfig, QueueConfig,
+                                      SuffixFilterRule)
 
 from etl.config import settings
 from etl.object_store.interfaces import EventType, ObjectEvent, ObjectStore
 from etl.object_store.object_id import ObjectId
+from etl.util import get_logger
 
 KEEP_FILENAME = '.keep'
+LOGGER = get_logger(__name__)
 
 class MinioObjectResponse(Protocol):
     """A duck type interface describing the minio object response"""
@@ -22,28 +27,21 @@ class MinioObjectResponse(Protocol):
 # Filter exclude suffix .toml.   But this is not supported by S3 https://github.com/minio/minio/issues/8217
 #hence the notification with etl_file_upload_notification is going to get everything, and we have to rely on
 #application level filtering
-notification_configs = {'QueueConfigurations': [
-    {
-        'Id': 'etl_file_upload_notification',
-        'Arn': settings.minio_notification_arn_etl_source_file,
-        'Events': ['s3:ObjectCreated:*', 's3:ObjectRemoved:*']
-    },
-    {
-        'Id': 'etl_config_upload_notification',
-        'Arn': settings.minio_notification_arn_etl_config,
-        'Events': ['s3:ObjectCreated:*', 's3:ObjectRemoved:*'],
-        'Filter': {
-            'Key': {
-                'FilterRules': [
-                    {
-                        'Name': 'suffix',
-                        'Value': '.toml'
-                    }
-                ]
-            }
-        }
-    }
-]}
+notification_configs = NotificationConfig(
+    queue_config_list=[
+        QueueConfig(
+            settings.minio_notification_arn_etl_source_file,
+            ['s3:ObjectCreated:*', 's3:ObjectRemoved:*'],
+            config_id='etl_file_upload_notification',
+        ),
+        QueueConfig(
+            settings.minio_notification_arn_etl_config,
+            ['s3:ObjectCreated:*', 's3:ObjectRemoved:*'],
+            config_id='etl_config_upload_notification',
+            suffix_filter_rule=SuffixFilterRule('.toml'),
+        ),
+    ],
+)
 
 
 
@@ -62,7 +60,6 @@ class MinioObjectStore(ObjectStore):
             self._minio_client.make_bucket(settings.minio_etl_bucket)
 
         self._minio_client.set_bucket_notification(settings.minio_etl_bucket, notification_configs)
-        self._minio_client.get_bucket_notification(settings.minio_etl_bucket)
 
     def download_object(self, src: ObjectId, dest_file: str) -> None:
         self._minio_client.fget_object(src.namespace, src.path, dest_file)
@@ -87,8 +84,17 @@ class MinioObjectStore(ObjectStore):
     def write_object(self, obj: ObjectId, data: bytes) -> None:
         self._minio_client.put_object(obj.namespace, obj.path, BytesIO(data), len(data))
 
-    def move_object(self, src: ObjectId, dest: ObjectId) -> None:
-        self._minio_client.copy_object(dest.namespace, dest.path, f'{src.namespace}/{src.path}')
+    def move_object(self, src: ObjectId, dest: ObjectId, metadata: Optional[Dict] = None) -> None:
+        if metadata:
+            self._minio_client.copy_object(
+                                dest.namespace,
+                                dest.path, 
+                                CopySource(src.namespace, src.path),
+                                metadata=metadata,
+                                metadata_directive=REPLACE,
+            )
+        else:
+            self._minio_client.copy_object(dest.namespace, dest.path, CopySource(src.namespace, src.path))
         self._minio_client.remove_object(src.namespace, src.path)
 
     def delete_object(self, obj: ObjectId) -> None:
@@ -103,7 +109,14 @@ class MinioObjectStore(ObjectStore):
         bucket_name, file_name = evt_data['Key'].split('/', 1)
         object_id = ObjectId(bucket_name, file_name)
         event_type = EventType.Delete if evt_data['EventName'].startswith('s3:ObjectRemoved') else EventType.Put
-        return ObjectEvent(object_id, event_type)
+        metadata = evt_data['Records'][0]['s3']['object'].get('userMetadata', None)
+        original_filename = None
+        event_status = None
+        if metadata:
+            original_filename = metadata.get('X-Amz-Meta-Originalfilename', None)
+            event_status = metadata.get('X-Amz-Meta-Status', None)
+
+        return ObjectEvent(object_id, event_type, original_filename, event_status)
 
     def list_objects(self, namespace: str, path: Optional[str] = None, recursive=False) -> Iterable[ObjectId]:
         for minio_object in self._minio_client.list_objects(namespace, path, recursive):

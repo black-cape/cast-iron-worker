@@ -1,12 +1,12 @@
 """Entry point for ETL worker"""
-from typing import AsyncIterable, Dict, List
 import logging.config
+from typing import AsyncIterable, Dict, List
 
 from etl.config import settings
-from etl.event_processor import GeneralEventProcessor, EtlConfigEventProcessor
+from etl.event_processor import EtlConfigEventProcessor, GeneralEventProcessor
 from etl.messaging.kafka_producer import KafkaMessageProducer
 from etl.object_store.minio import MinioObjectStore
-from etl.tasking.faust import FaustTaskSink, FaustAppConfig
+from etl.tasking.faust import FaustAppConfig, FaustTaskSink
 
 logging.config.fileConfig(settings.logging_conf_file)
 
@@ -29,7 +29,7 @@ async def etl_config_file_evt(evts: AsyncIterable[Dict]) -> None:
 #Fause Agent definition to process ETL source data files
 async def general_file_evt(evts: AsyncIterable[Dict]) -> None:
     async for evt in evts:
-        etl_source_data_event_processor.process(evt)
+        await etl_source_data_event_processor.process(evt)
 
 
 # configure two separate Faust Apps for the single Faust worker in FaustTaskSink

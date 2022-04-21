@@ -1,8 +1,7 @@
 """Contains the Faust implementation of the TaskSink backend interface"""
 import logging
 from dataclasses import dataclass
-from typing import Callable
-from typing import Dict, Optional, List
+from typing import Callable, Dict, List, Optional
 
 import faust
 
