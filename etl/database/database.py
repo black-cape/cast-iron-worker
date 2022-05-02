@@ -18,73 +18,85 @@ LOGGER = get_logger(__name__)
 class PGDatabase(DatabaseStore):
     """Implements the DatabaseStore interface using Minio as the backend service"""
     def __init__(self):
-        self._database = PoolDatabase(f'postgres://{settings.database_user}:{settings.database_password}@{settings.database_host}/{settings.database_db}')
-        self._table_manager = TableManager(self._database, 'files', pk_field='id', hooks=None)
+        self._database = None
+        try:
+            self._database = PoolDatabase(f'postgres://{settings.database_user}:{settings.database_password}@{settings.database_host}/{settings.database_db}')
+            self._table_manager = TableManager(self._database, 'files', pk_field='id', hooks=None)
+        except(DatabaseError, InvalidPasswordError) as db_error:
+            return
 
     async def create_table(self) -> bool:
         """ Check for and create database table """
         LOGGER.info('Creating DB table...')
         try:
-            await self._database.init_pool()
-            conn = await self._database.get_connection()
-            await conn.execute(
-                """
-                CREATE TABLE IF NOT EXISTS files (
-                    id uuid PRIMARY KEY,
-                    bucket_name text,
-                    file_name text,
-                    status text,
-                    processing_status text,
-                    original_filename text,
-                    event_name text,
-                    source_ip text,
-                    size int,
-                    etag text,
-                    content_type text,
-                    create_datetime timestamp with time zone,
-                    update_datetime timestamp with time zone,
-                    classification jsonb,
-                    metadata jsonb
-                );
-                """
-            )
-            await conn.close()
-            return True
+            if self._database:
+                await self._database.init_pool()
+                conn = await self._database.get_connection()
+                await conn.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS files (
+                        id uuid PRIMARY KEY,
+                        bucket_name text,
+                        file_name text,
+                        status text,
+                        processing_status text,
+                        original_filename text,
+                        event_name text,
+                        source_ip text,
+                        size int,
+                        etag text,
+                        content_type text,
+                        create_datetime timestamp with time zone,
+                        update_datetime timestamp with time zone,
+                        classification jsonb,
+                        metadata jsonb
+                    );
+                    """
+                )
+                await conn.close()
+                return True
+            return False
         except (DatabaseError, InvalidPasswordError) as db_error:
             LOGGER.info('Database not active.  Exception: %s', db_error)
             return False
 
     async def insert_file(self, filedata: FileObject):
         """ Track a new file from Minio"""
-        LOGGER.info("Inserting file into DB...")
-        await self._database.insert('files', dict(filedata))
+        if self._database:
+            LOGGER.info("Inserting file into DB...")
+            await self._database.insert('files', dict(filedata))
 
     async def move_file(self, rowid: str, new_name: str):
         """ Track the moving of a file in Minio"""
-        rec_data = {}
-        rec_data['path'] = new_name
-        rec_data['update_datetime'] = f'{datetime.now().isoformat()}Z'
-        await self._table_manager.update(rowid, rec_data)
+        if self._database:
+            rec_data = {}
+            rec_data['path'] = new_name
+            rec_data['update_datetime'] = f'{datetime.now().isoformat()}Z'
+            await self._table_manager.update(rowid, rec_data)
 
     async def delete_file(self, rowid: str):
         """ Track the deleting of a file in Minio"""
-        await self._table_manager.delete(rowid)
+        if self._database:
+            await self._table_manager.delete(rowid)
 
     async def list_files(self, metadata: Optional[Dict]):
         """ List all tracked files by provided filter """
-        return await self._table_manager.list(filters=metadata)
+        if self._database:
+            return await self._table_manager.list(filters=metadata)
 
     async def retrieve_file_metadata(self, rowid: str):
         """ Retrieve a row based on ID """
-        return await self._table_manager.detail(rowid)
+        if self._database:
+            return await self._table_manager.detail(rowid)
 
     async def update_status(self, rowid: str, new_status: str, new_filename: str):
         """ Update the file status/state """
-        rec_data = {}
-        rec_data['status'] = new_status
-        rec_data['file_name'] = new_filename
-        rec_data['update_datetime'] = datetime.now()
-        await self._table_manager.update(rowid, rec_data)
+        if self._database:
+            rec_data = {}
+            rec_data['status'] = new_status
+            rec_data['file_name'] = new_filename
+            rec_data['update_datetime'] = datetime.now()
+            await self._table_manager.update(rowid, rec_data)
 
     def parse_notification(self, evt_data: Any):
         """ Parse a Minio notification to create a DB row """
